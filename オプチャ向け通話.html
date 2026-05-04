@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>無料ウェブ通話</title>
+  <script src="https://jsdelivr.net"></script>
+  <style>
+    body { font-family: sans-serif; text-align: center; background: #f0f4f8; }
+    #video-container { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; padding: 20px; }
+    video { width: 100%; background: #000; border-radius: 8px; }
+    .controls { margin-top: 20px; }
+  </style>
+</head>
+<body>
+
+  <h2>ウェブ通話ルーム</h2>
+  <p id="room-id-display">部屋ID: 取得中...</p>
+  <div class="controls">
+    <button id="join-btn">通話を開始する</button>
+  </div>
+
+  <div id="video-container">
+    <video id="my-video" muted playsinline autoplay></video>
+  </div>
+
+  <script>
+    const { SkyWayContext, SkyWayRoom, SkyWayStreamFactory } = SkyWayRoom;
+
+    // --- 設定 ---
+    const appId = 'b0dc9644-63d5-47ea-9739-249a5b37166c'; // 取得したIDに書き換えてください
+    
+    // URLから部屋名を取得（例: ?room=abc）無ければランダム
+    const params = new URLSearchParams(window.location.search);
+    let roomName = params.get('room');
+    if (!roomName) {
+        roomName = Math.random().toString(36).substring(7);
+        window.history.pushState(null, null, `?room=${roomName}`);
+    }
+    document.getElementById('room-id-display').innerText = `このURLを共有してください: ${window.location.href}`;
+
+    const joinBtn = document.getElementById('join-btn');
+    const videoContainer = document.getElementById('video-container');
+    const myVideo = document.getElementById('my-video');
+
+    joinBtn.onclick = async () => {
+        joinBtn.disabled = true;
+        joinBtn.innerText = "接続中...";
+
+        // 1. 自分のカメラとマイクを準備
+        const { audio, video } = await SkyWayStreamFactory.createMicrophoneAudioAndCameraStream();
+        myVideo.srcObject = new MediaStream([video.track]);
+
+        // 2. SkyWayに接続
+        const context = await SkyWayContext.Create(appId);
+        const room = await SkyWayRoom.FindOrCreate(context, { type: 'sfu', name: roomName });
+        const me = await room.join();
+
+        // 3. 自分の映像を送信
+        await me.publish(audio);
+        await me.publish(video);
+
+        // 4. 他の人の映像を受信して表示
+        const subscribe = async (publication) => {
+            if (publication.publisher.id === me.id) return;
+            const { stream } = await me.subscribe(publication.id);
+            
+            let newVideo = document.createElement('video');
+            newVideo.playsinline = true;
+            newVideo.autoplay = true;
+            newVideo.id = `video-${publication.publisher.id}`;
+            stream.attach(newVideo);
+            videoContainer.appendChild(newVideo);
+        };
+
+        room.onPublicationExposed.add(({ publication }) => subscribe(publication));
+        room.publications.forEach(subscribe);
+
+        joinBtn.innerText = "通話中";
+    };
+  </script>
+</body>
+</html>
