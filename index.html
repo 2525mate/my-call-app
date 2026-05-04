@@ -2,90 +2,131 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <title>無料ウェブ通話</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>無料ウェブ通話（完全版）</title>
   <script src="https://jsdelivr.net"></script>
   <style>
-    body { font-family: sans-serif; text-align: center; background: #f0f4f8; margin: 0; padding: 20px; }
-    #video-container { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-top: 20px; }
-    video { width: 100%; background: #333; border-radius: 8px; min-height: 120px; }
-    .controls { background: white; padding: 15px; border-radius: 10px; position: sticky; top: 0; z-index: 100; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
-    button { padding: 10px 20px; font-size: 14px; cursor: pointer; border-radius: 5px; border: none; background: #007bff; color: white; margin: 5px; }
-    button:disabled { background: #ccc; }
+    body { font-family: 'Helvetica Neue', Arial, sans-serif; text-align: center; background: #f0f2f5; margin: 0; padding: 20px; color: #333; }
+    .controls { background: white; padding: 20px; border-radius: 12px; position: sticky; top: 10px; z-index: 100; box-shadow: 0 4px 12px rgba(0,0,0,0.1); max-width: 500px; margin: 0 auto 20px; }
+    #video-container { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 15px; max-width: 1000px; margin: 0 auto; }
+    video { width: 100%; background: #222; border-radius: 10px; min-height: 120px; object-fit: cover; }
+    button { padding: 12px 24px; font-size: 16px; font-weight: bold; cursor: pointer; border-radius: 30px; border: none; background: #007bff; color: white; margin: 8px; transition: 0.3s; }
+    button:disabled { background: #ccc; cursor: not-allowed; }
     #cam-btn { background: #28a745; }
+    .room-info { font-size: 13px; color: #666; word-break: break-all; margin-top: 10px; }
+    .status { color: #d9534f; font-weight: bold; margin-bottom: 10px; }
   </style>
 </head>
 <body>
 
   <div class="controls">
-    <h3>通話ルーム</h3>
-    <p id="room-id" style="font-size: 12px; color: #666;"></p>
-    <button id="join-btn">通話に参加する（音声のみ）</button>
+    <div id="status" class="status">接続準備中...</div>
+    <button id="join-btn">通話に参加（音声のみ）</button>
     <button id="cam-btn" style="display:none;">カメラをONにする</button>
+    <div class="room-info" id="room-url"></div>
   </div>
 
   <div id="video-container">
+    <!-- 自分の映像 -->
     <video id="my-video" muted playsinline autoplay></video>
   </div>
 
   <script>
     const { SkyWayContext, SkyWayRoom, SkyWayStreamFactory } = SkyWayRoom;
-    const appId = 'b0dc9644-63d5-47ea-9739-249a5b37166c'; // あなたのID
-    
+
+    // --- 【設定】ここを必ず書き換えてください ---
+    const appId = 'b0dc9644-63d5-47ea-9739-249a5b37166c';
+    const secretKey = 'qnBPgT3FbZc9d90O+jBiOzLkFvKS1Blf+CwpyrRwNYo=';
+    // -----------------------------------------
+
     const params = new URLSearchParams(window.location.search);
-    let roomName = params.get('room') || 'default-room';
-    document.getElementById('room-id').innerText = `部屋名: ${roomName}`;
+    let roomName = params.get('room');
+    if (!roomName) {
+        roomName = Math.random().toString(36).substring(7);
+        window.history.pushState(null, null, `?room=${roomName}`);
+    }
+
+    document.getElementById('status').innerText = "接続の準備ができました";
+    document.getElementById('room-url').innerText = `共有URL: ${window.location.href}`;
 
     const joinBtn = document.getElementById('join-btn');
     const camBtn = document.getElementById('cam-btn');
     const videoContainer = document.getElementById('video-container');
     const myVideo = document.getElementById('my-video');
 
-    let me, videoStream;
+    let me, context, room;
+    let videoStream;
 
     joinBtn.onclick = async () => {
         joinBtn.disabled = true;
-        joinBtn.innerText = "接続済み";
+        joinBtn.innerText = "接続中...";
 
-        // 1. マイクだけ準備して参加
-        const { audio } = await SkyWayStreamFactory.createMicrophoneAudioAndCameraStream({video: false});
-        const context = await SkyWayContext.Create(appId);
-        const room = await SkyWayRoom.FindOrCreate(context, { type: 'sfu', name: roomName });
-        me = await room.join();
+        try {
+            // 1. マイクのみ取得（軽量化のためカメラは後回し）
+            const { audio } = await SkyWayStreamFactory.createMicrophoneAudioAndCameraStream({ audio: true, video: false });
 
-        await me.publish(audio);
-        camBtn.style.display = "inline-block"; // 参加後にカメラボタンを表示
+            // 2. SkyWayに接続（開発モード）
+            context = await SkyWayContext.CreateForDevelopment(appId, secretKey);
+            room = await SkyWayRoom.FindOrCreate(context, { type: 'sfu', name: roomName });
+            me = await room.join();
 
-        // 2. 他の人の受信処理
-        const subscribe = async (publication) => {
-            if (publication.publisher.id === me.id) return;
-            const { stream } = await me.subscribe(publication.id);
-            if (publication.contentType === 'video') {
-                let v = document.getElementById(`v-${publication.publisher.id}`) || document.createElement('video');
-                v.id = `v-${publication.publisher.id}`;
-                v.playsinline = true; v.autoplay = true;
-                stream.attach(v);
-                if (!v.parentElement) videoContainer.appendChild(v);
-            }
-        };
-        room.onPublicationExposed.add(({ publication }) => subscribe(publication));
-        room.publications.forEach(subscribe);
+            // 3. 音声を配信
+            await me.publish(audio);
+
+            joinBtn.innerText = "通話中";
+            document.getElementById('status').innerText = "通話に参加しました";
+            document.getElementById('status').style.color = "#28a745";
+            camBtn.style.display = "inline-block";
+
+            // 4. すでに部屋にいる人・後から入る人の受信設定
+            const subscribe = async (publication) => {
+                if (publication.publisher.id === me.id) return;
+                const { stream } = await me.subscribe(publication.id);
+
+                if (publication.contentType === 'video') {
+                    let v = document.getElementById(`v-${publication.publisher.id}`) || document.createElement('video');
+                    v.id = `v-${publication.publisher.id}`;
+                    v.playsinline = true; v.autoplay = true;
+                    stream.attach(v);
+                    if (!v.parentElement) videoContainer.appendChild(v);
+                } else {
+                    // 音声ストリーム用（見えないオーディオ要素）
+                    const a = document.createElement('audio');
+                    a.autoplay = true;
+                    stream.attach(a);
+                }
+            };
+
+            room.onPublicationExposed.add(({ publication }) => subscribe(publication));
+            room.publications.forEach(subscribe);
+
+        } catch (e) {
+            console.error(e);
+            alert("エラーが発生しました。IDやキー、カメラ許可を確認してください。");
+            joinBtn.disabled = false;
+            joinBtn.innerText = "再試行";
+        }
     };
 
-    // カメラボタンが押された時の処理
+    // カメラボタンを押した時の処理
     camBtn.onclick = async () => {
         if (!videoStream) {
-            const { video } = await SkyWayStreamFactory.createMicrophoneAudioAndCameraStream({
-                video: { width: 320, height: 180, frameRate: 15 }
-            });
-            videoStream = video;
-            myVideo.srcObject = new MediaStream([video.track]);
-            await me.publish(video);
-            camBtn.innerText = "カメラ通信中";
-            camBtn.disabled = true;
+            try {
+                // 解像度とフレームレートを下げて「超軽量」設定
+                const { video } = await SkyWayStreamFactory.createMicrophoneAudioAndCameraStream({
+                    video: { width: 320, height: 180, frameRate: 10 }
+                });
+                videoStream = video;
+                myVideo.srcObject = new MediaStream([video.track]);
+                await me.publish(video);
+                camBtn.innerText = "カメラ通信中";
+                camBtn.disabled = true;
+            } catch (e) {
+                alert("カメラの起動に失敗しました。");
+            }
         }
     };
   </script>
 </body>
 </html>
 
-</html>
