@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SkyWay SFU Room</title>
+    <!-- 1. 道具箱（ライブラリ）を読み込む -->
     <script src="https://cdn.jsdelivr.net/npm/@skyway-sdk/room/dist/skyway_room.js"></script>
     <style>
         body { margin: 20px; font-family: sans-serif; background: #f8f9fa; }
@@ -20,18 +21,18 @@
 
 <div class="grid">
     <div class="card">
-        <h2>Local (You)</h2>
+        <h2>Local (自分)</h2>
         <video id="local-video" autoplay playsinline></video>
         <audio id="local-audio" autoplay muted controls></audio>
         <p class="id-text">My ID: <span id="my-id">---</span></p>
-        <input id="room-name" placeholder="Room名（例: myroom123）">
+        <input id="room-name" placeholder="Room名（例: niko123）">
         <button id="join-button">Room作成 / 参加</button>
         <button id="local-mute-buton" disabled>映像・音声 OFF</button>
         <button id="leave-button" disabled>終了</button>
     </div>
 
     <div class="card">
-        <h2>Remote (Partner)</h2>
+        <h2>Remote (相手)</h2>
         <video id="remote-video" autoplay playsinline></video>
         <audio id="remote-audio" autoplay controls></audio>
         <p class="id-text">Remote ID: <span id="remote-id">---</span></p>
@@ -40,13 +41,21 @@
 </div>
 
 <script>
-    const { nowInSec, SkyWayAuthToken, SkyWayContext, SkyWayRoom, SkyWayStreamFactory, uuidV4 } = skyway_room;
+    // 2. ライブラリの読み込みが完了してから動くように設定
+    window.onload = async () => {
+        
+        // ライブラリが正しく読み込まれているかチェック
+        if (typeof skyway_room === 'undefined') {
+            alert("SkyWayの読み込みに失敗しました。ネット接続を確認してください。");
+            return;
+        }
 
-    // --- ここを書き換えてください ---
-    const appId = 'b0dc9644-63d5-47ea-9739-249a5b37166c';
-    const secretKey = 'qnBPgT3FbZc9d90O+jBiOzLkFvKS1Blf+CwpyrRwNYo=';
+        const { nowInSec, SkyWayAuthToken, SkyWayContext, SkyWayRoom, SkyWayStreamFactory, uuidV4 } = skyway_room;
 
-    (async () => {
+        // --- ★ここにあなたのキーを貼り付けてください ---
+        const appId = 'アプリケーションIDをここに貼り付け';
+        const secretKey = 'シークレットキーをここに貼り付け';
+
         const localAudio = document.getElementById('local-audio');
         const localVideo = document.getElementById('local-video');
         const roomNameInput = document.getElementById('room-name');
@@ -61,6 +70,7 @@
 
         let isMuted = false;
 
+        // カメラとマイクを準備
         const { audio, video } = await SkyWayStreamFactory.createMicrophoneAudioAndCameraStream();
         audio.attach(localAudio);
         video.attach(localVideo);
@@ -69,7 +79,7 @@
             if (!roomNameInput.value) return;
             joinButton.disabled = true;
 
-            // 1. トークン生成
+            // 3. 通行証（トークン）を作成
             const token = new SkyWayAuthToken({
                 jti: uuidV4(),
                 iat: nowInSec(),
@@ -92,20 +102,19 @@
                 },
             }).encode(secretKey);
 
-            // 2. 【ご指定の箇所】ContextとRoomの作成
+            // 4. 指定された通り、一字一句変えずに組み込み
             const context = await SkyWayContext.Create(token);
             const room = await SkyWayRoom.FindOrCreate(context, {
                 type: 'sfu',
                 name: roomNameInput.value,
             });
 
-            // 3. Roomに参加
+            // 5. 部屋に参加
             const me = await room.join();
             myId.textContent = me.id;
             localMuteButton.disabled = false;
             leaveButton.disabled = false;
 
-            // 4. 配信・受信の開始
             const localAudioPub = await me.publish(audio);
             const localVideoPub = await me.publish(video);
 
@@ -139,7 +148,7 @@
 
             leaveButton.onclick = () => location.reload();
         };
-    })();
+    };
 </script>
 </body>
 </html>
