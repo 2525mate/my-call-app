@@ -5,18 +5,22 @@
   <title>無料ウェブ通話</title>
   <script src="https://jsdelivr.net"></script>
   <style>
-    body { font-family: sans-serif; text-align: center; background: #f0f4f8; }
-    #video-container { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; padding: 20px; }
-    video { width: 100%; background: #000; border-radius: 8px; }
-    .controls { margin-top: 20px; }
+    body { font-family: sans-serif; text-align: center; background: #f0f4f8; margin: 0; padding: 20px; }
+    #video-container { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-top: 20px; }
+    video { width: 100%; background: #333; border-radius: 8px; min-height: 120px; }
+    .controls { background: white; padding: 15px; border-radius: 10px; position: sticky; top: 0; z-index: 100; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+    button { padding: 10px 20px; font-size: 14px; cursor: pointer; border-radius: 5px; border: none; background: #007bff; color: white; margin: 5px; }
+    button:disabled { background: #ccc; }
+    #cam-btn { background: #28a745; }
   </style>
 </head>
 <body>
 
-  <h2>ウェブ通話ルーム</h2>
-  <p id="room-id-display">部屋ID: 取得中...</p>
   <div class="controls">
-    <button id="join-btn">通話を開始する</button>
+    <h3>通話ルーム</h3>
+    <p id="room-id" style="font-size: 12px; color: #666;"></p>
+    <button id="join-btn">通話に参加する（音声のみ）</button>
+    <button id="cam-btn" style="display:none;">カメラをONにする</button>
   </div>
 
   <div id="video-container">
@@ -25,58 +29,63 @@
 
   <script>
     const { SkyWayContext, SkyWayRoom, SkyWayStreamFactory } = SkyWayRoom;
-
-    // --- 設定 ---
-    const appId = 'b0dc9644-63d5-47ea-9739-249a5b37166c'; // 取得したIDに書き換えてください
+    const appId = 'b0dc9644-63d5-47ea-9739-249a5b37166c'; // あなたのID
     
-    // URLから部屋名を取得（例: ?room=abc）無ければランダム
     const params = new URLSearchParams(window.location.search);
-    let roomName = params.get('room');
-    if (!roomName) {
-        roomName = Math.random().toString(36).substring(7);
-        window.history.pushState(null, null, `?room=${roomName}`);
-    }
-    document.getElementById('room-id-display').innerText = `このURLを共有してください: ${window.location.href}`;
+    let roomName = params.get('room') || 'default-room';
+    document.getElementById('room-id').innerText = `部屋名: ${roomName}`;
 
     const joinBtn = document.getElementById('join-btn');
+    const camBtn = document.getElementById('cam-btn');
     const videoContainer = document.getElementById('video-container');
     const myVideo = document.getElementById('my-video');
 
+    let me, videoStream;
+
     joinBtn.onclick = async () => {
         joinBtn.disabled = true;
-        joinBtn.innerText = "接続中...";
+        joinBtn.innerText = "接続済み";
 
-        // 1. 自分のカメラとマイクを準備
-        const { audio, video } = await SkyWayStreamFactory.createMicrophoneAudioAndCameraStream();
-        myVideo.srcObject = new MediaStream([video.track]);
-
-        // 2. SkyWayに接続
+        // 1. マイクだけ準備して参加
+        const { audio } = await SkyWayStreamFactory.createMicrophoneAudioAndCameraStream({video: false});
         const context = await SkyWayContext.Create(appId);
         const room = await SkyWayRoom.FindOrCreate(context, { type: 'sfu', name: roomName });
-        const me = await room.join();
+        me = await room.join();
 
-        // 3. 自分の映像を送信
         await me.publish(audio);
-        await me.publish(video);
+        camBtn.style.display = "inline-block"; // 参加後にカメラボタンを表示
 
-        // 4. 他の人の映像を受信して表示
+        // 2. 他の人の受信処理
         const subscribe = async (publication) => {
             if (publication.publisher.id === me.id) return;
             const { stream } = await me.subscribe(publication.id);
-            
-            let newVideo = document.createElement('video');
-            newVideo.playsinline = true;
-            newVideo.autoplay = true;
-            newVideo.id = `video-${publication.publisher.id}`;
-            stream.attach(newVideo);
-            videoContainer.appendChild(newVideo);
+            if (publication.contentType === 'video') {
+                let v = document.getElementById(`v-${publication.publisher.id}`) || document.createElement('video');
+                v.id = `v-${publication.publisher.id}`;
+                v.playsinline = true; v.autoplay = true;
+                stream.attach(v);
+                if (!v.parentElement) videoContainer.appendChild(v);
+            }
         };
-
         room.onPublicationExposed.add(({ publication }) => subscribe(publication));
         room.publications.forEach(subscribe);
+    };
 
-        joinBtn.innerText = "通話中";
+    // カメラボタンが押された時の処理
+    camBtn.onclick = async () => {
+        if (!videoStream) {
+            const { video } = await SkyWayStreamFactory.createMicrophoneAudioAndCameraStream({
+                video: { width: 320, height: 180, frameRate: 15 }
+            });
+            videoStream = video;
+            myVideo.srcObject = new MediaStream([video.track]);
+            await me.publish(video);
+            camBtn.innerText = "カメラ通信中";
+            camBtn.disabled = true;
+        }
     };
   </script>
 </body>
+</html>
+
 </html>
