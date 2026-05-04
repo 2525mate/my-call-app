@@ -1,196 +1,209 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>SkyWay 1-File Call App</title>
-  <!-- SkyWay SDK -->
-  <script src="https://cdn.jsdelivr.net/npm/@skyway-sdk/room/dist/skyway_room.js"></script>
-  <style>
-    /* CSS部分 */
-    body { margin: 20px; font-family: sans-serif; background: #fafafa; }
-    h1 { font-size: 1.5rem; color: #333; }
-    video { background-color: #111; width: 100%; max-height: 350px; border-radius: 8px; margin-bottom: 5px; }
-    .grid-container { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; }
-    .item { background: #fff; padding: 15px; border-radius: 12px; border: 1px solid #ddd; }
-    input, button, select { padding: 8px; margin: 5px 0; width: 100%; box-sizing: border-box; border-radius: 4px; border: 1px solid #ccc; cursor: pointer; }
-    button:disabled { cursor: not-allowed; opacity: 0.6; }
-    .id-text { font-size: 11px; color: #666; word-break: break-all; }
-    #button-area button { background: #e0f7fa; border: 1px solid #4dd0e1; margin-top: 10px; }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SkyWay SFU Room - Final</title>
+    <!-- SkyWay SDKの読み込み -->
+    <script src="https://cdn.jsdelivr.net/npm/@skyway-sdk/room/dist/skyway_room.js"></script>
+    <style>
+        body { margin: 20px; font-family: 'Helvetica Neue', Arial, sans-serif; background: #f0f2f5; color: #333; }
+        .container { max-width: 1000px; margin: 0 auto; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; }
+        .card { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        video { width: 100%; background: #000; border-radius: 8px; max-height: 300px; object-fit: cover; }
+        input, button { width: 100%; padding: 12px; margin: 8px 0; border-radius: 6px; border: 1px solid #ddd; font-size: 16px; box-sizing: border-box; }
+        button { background: #007bff; color: white; border: none; font-weight: bold; cursor: pointer; transition: 0.2s; }
+        button:hover { background: #0056b3; }
+        button:disabled { background: #ccc; cursor: not-allowed; }
+        .id-text { font-size: 12px; color: #777; word-break: break-all; margin-top: 5px; }
+        #local-mute-buton { background: #6c757d; }
+        #leave-button { background: #dc3545; }
+        #button-area button { background: #28a745; margin-top: 10px; }
+    </style>
 </head>
 <body>
 
-<h1>SkyWay 通話システム</h1>
+<div class="container">
+    <h1>SkyWay SFU Room</h1>
+    <div class="grid">
+        <!-- 自分のエリア -->
+        <div class="card">
+            <h2>自分</h2>
+            <video id="local-video" autoplay playsinline></video>
+            <audio id="local-audio" autoplay muted controls></audio>
+            <p class="id-text">My ID: <span id="my-id">---</span></p>
+            <input id="room-name" placeholder="Room名を入力（例: niko-room）">
+            <button id="join-button">Room作成 / 参加</button>
+            <button id="local-mute-buton" disabled>映像・音声 OFF</button>
+            <button id="leave-button" disabled>Roomを閉じる</button>
+        </div>
 
-<div class="grid-container">
-  <!-- ローカル（自分） -->
-  <div id="local" class="item">
-    <video id="local-video" autoplay playsinline></video>
-    <audio id="local-audio" autoplay muted controls></audio>
-    <p class="id-text">My ID: <span id="my-id">---</span></p>
-    <input id="room-name" placeholder="ルーム名を入力（例：room1）">
-    <button id="join-button">Room作成/参加</button>
-    <button id="local-mute-buton" disabled>映像・音声OFF</button>
-    <button id="leave-button" disabled>終了してリロード</button>
-  </div>
-
-  <!-- リモート（相手） -->
-  <div id="remote" class="item">
-    <video id="remote-video" autoplay playsinline></video>
-    <audio id="remote-audio" autoplay controls></audio>
-    <p class="id-text">Remote ID: <span id="remote-id">---</span></p>
-    <div id="button-area"></div>
-  </div>
+        <!-- 相手のエリア -->
+        <div class="card">
+            <h2>相手</h2>
+            <video id="remote-video" autoplay playsinline></video>
+            <audio id="remote-audio" autoplay controls></audio>
+            <p class="id-text">Remote ID: <span id="remote-id">---</span></p>
+            <div id="button-area"></div>
+        </div>
+    </div>
 </div>
 
 <script>
-  // JavaScript部分
-  const { nowInSec, SkyWayAuthToken, SkyWayContext, SkyWayRoom, SkyWayStreamFactory, uuidV4 } = skyway_room;
+    const { nowInSec, SkyWayAuthToken, SkyWayContext, SkyWayRoom, SkyWayStreamFactory, uuidV4 } = skyway_room;
 
-  // --- 設定：ここに自分のキーを貼る ---
-  const appId = 'b0dc9644-63d5-47ea-9739-249a5b37166c';
-  const secretKey = 'qnBPgT3FbZc9d90O+jBiOzLkFvKS1Blf+CwpyrRwNYo=';
+    // --- 【重要】ここに自分の情報を貼り付けてください ---
+    const appId = 'アプリケーションIDをここに貼り付け';
+    const secretKey = 'シークレットキーをここに貼り付け';
 
-  (async () => {
-    const localAudio = document.getElementById('local-audio');
-    const localVideo = document.getElementById('local-video');
-    const roomNameInput = document.getElementById('room-name');
-    const joinButton = document.getElementById('join-button');
-    const localMuteButton = document.getElementById('local-mute-buton');
-    const leaveButton = document.getElementById('leave-button');
-    const myId = document.getElementById('my-id');
-    const remoteId = document.getElementById('remote-id');
-    const remoteVideo = document.getElementById('remote-video');
-    const remoteAudio = document.getElementById('remote-audio');
-    const buttonArea = document.querySelector('#button-area');
+    (async () => {
+        // 要素の取得
+        const localAudio = document.getElementById('local-audio');
+        const localVideo = document.getElementById('local-video');
+        const roomNameInput = document.getElementById('room-name');
+        const joinButton = document.getElementById('join-button');
+        const localMuteButton = document.getElementById('local-mute-buton');
+        const leaveButton = document.getElementById('leave-button');
+        const myId = document.getElementById('my-id');
+        const remoteId = document.getElementById('remote-id');
+        const remoteVideo = document.getElementById('remote-video');
+        const remoteAudio = document.getElementById('remote-audio');
+        const buttonArea = document.querySelector('#button-area');
 
-    const maxNumberParticipants = 10; 
-    let isMuted = false;
+        let isMuted = false;
 
-    // トークン生成
-    const token = new SkyWayAuthToken({
-      jti: uuidV4(),
-      iat: nowInSec(),
-      exp: nowInSec() + 60 * 60 * 24,
-      scope: {
-        app: {
-          id: appId,
-          turn: true,
-          actions: ['read'],
-          channels: [{
-            id: '*', name: '*', actions: ['write'],
-            members: [{
-              id: '*', name: '*', actions: ['write'],
-              publication: { actions: ['write'] },
-              subscription: { actions: ['write'] },
-            }],
-            sfuBots: [{ actions: ['write'], forwardings: [{ actions: ['write'] }] }],
-          }],
-        },
-      },
-    }).encode(secretKey);
+        // カメラとマイクの初期取得
+        const { audio, video } = await SkyWayStreamFactory.createMicrophoneAudioAndCameraStream();
+        audio.attach(localAudio);
+        video.attach(localVideo);
 
-    // カメラ・マイク取得
-    const { audio, video } = await SkyWayStreamFactory.createMicrophoneAudioAndCameraStream();
-    audio.attach(localAudio);
-    video.attach(localVideo);
+        joinButton.onclick = async () => {
+            if (roomNameInput.value === '') {
+                alert('Room名を入力してください');
+                return;
+            }
+            joinButton.disabled = true;
+            joinButton.innerText = '接続中...';
 
-    joinButton.onclick = async () => {
-      if (roomNameInput.value === '') return;
-      joinButton.disabled = true;
+            // --- 【絶対に必要】ご提示いただいたToken生成ロジック ---
+            const token = new SkyWayAuthToken({
+                jti: uuidV4(),
+                iat: nowInSec(),
+                exp: nowInSec() + 60 * 60 * 24,
+                scope: {
+                    app: {
+                        id: appId,
+                        turn: true,
+                        actions: ['read'],
+                        channels: [{
+                            id: '*',
+                            name: '*',
+                            actions: ['write'],
+                            members: [{
+                                id: '*',
+                                name: '*',
+                                actions: ['write'],
+                                publication: { actions: ['write'] },
+                                subscription: { actions: ['write'] },
+                            }],
+                            sfuBots: [{
+                                actions: ['write'],
+                                forwardings: [{ actions: ['write'] }],
+                            }],
+                        }],
+                    },
+                },
+            }).encode(secretKey);
 
-      const context = await SkyWayContext.Create(token);
-      const room = await SkyWayRoom.FindOrCreate(context, {
-        type: 'sfu',
-        name: roomNameInput.value,
-      });
+            try {
+                // SkyWayへの接続開始
+                const context = await SkyWayContext.Create(token);
+                const room = await SkyWayRoom.FindOrCreate(context, {
+                    type: 'sfu',
+                    name: roomNameInput.value,
+                });
 
-      if (room.members.length > maxNumberParticipants) {
-        alert('満員です');
-        return;
-      }
+                const me = await room.join();
+                myId.textContent = me.id;
 
-      const me = await room.join();
-      myId.textContent = me.id;
-      localMuteButton.disabled = false;
-      leaveButton.disabled = false;
+                // UI状態の更新
+                localMuteButton.disabled = false;
+                leaveButton.disabled = false;
+                joinButton.innerText = '接続済み';
 
-      // 自分の配信を開始
-      const localAudioPub = await me.publish(audio);
-      const localVideoPub = await me.publish(video, {
-        encodings: [
-          { maxBitrate: 80_000, id: 'low' },
-          { maxBitrate: 500_000, id: 'middle' },
-          { maxBitrate: 5000_000, id: 'high' },
-        ],
-      });
+                // 自分の映像・音声を配信
+                const localAudioPub = await me.publish(audio);
+                const localVideoPub = await me.publish(video, {
+                    encodings: [
+                        { maxBitrate: 80_000, id: 'low' },
+                        { maxBitrate: 500_000, id: 'middle' },
+                        { maxBitrate: 5000_000, id: 'high' },
+                    ],
+                });
 
-      // 相手のストリームを処理する関数
-      const subscribeAndAttach = (publication) => {
-        if (publication.publisher.id === me.id) return;
-        remoteId.textContent = publication.publisher.id;
+                // 受信処理の定義
+                const subscribeAndAttach = (publication) => {
+                    if (publication.publisher.id === me.id) return;
+                    remoteId.textContent = publication.publisher.id;
 
-        const subBtn = document.createElement('button');
-        subBtn.textContent = `${publication.contentType}を受信`;
-        buttonArea.appendChild(subBtn);
+                    const subBtn = document.createElement('button');
+                    subBtn.textContent = `${publication.contentType}を受信開始`;
+                    buttonArea.appendChild(subBtn);
 
-        let selectBox;
-        if (publication.contentType === 'video') {
-          selectBox = document.createElement('select');
-          ['low', 'middle', 'high'].forEach(v => {
-            let opt = document.createElement('option');
-            opt.value = v; opt.text = `画質:${v}`;
-            selectBox.appendChild(opt);
-          });
-          buttonArea.appendChild(selectBox);
-        }
+                    subBtn.onclick = async () => {
+                        const { stream, subscription } = await me.subscribe(publication.id);
+                        if (stream.track.kind === 'video') {
+                            stream.attach(remoteVideo);
+                            subscription.changePreferredEncoding('low');
+                            publication.onDisabled.add(() => remoteVideo.load());
+                        } else {
+                            stream.attach(remoteAudio);
+                        }
+                        subBtn.disabled = true;
+                        subBtn.innerText = `${publication.contentType}受信中`;
+                    };
+                };
 
-        subBtn.onclick = async () => {
-          const { stream, subscription } = await me.subscribe(publication.id);
-          if (stream.track.kind === 'video') {
-            stream.attach(remoteVideo);
-            subscription.changePreferredEncoding('low');
-            if(selectBox) selectBox.onchange = () => subscription.changePreferredEncoding(selectBox.value);
-            publication.onDisabled.add(() => remoteVideo.load());
-          } else {
-            stream.attach(remoteAudio);
-          }
-          subBtn.disabled = true;
+                // すでに入室している人の分を処理
+                room.publications.forEach(subscribeAndAttach);
+                // あとから入ってきた人の分を処理
+                room.onStreamPublished.add((e) => subscribeAndAttach(e.publication));
+
+                // ミュートボタン
+                localMuteButton.onclick = async () => {
+                    if (isMuted) {
+                        await localAudioPub.enable();
+                        await localVideoPub.enable();
+                        localMuteButton.textContent = '映像・音声 OFF';
+                    } else {
+                        await localAudioPub.disable();
+                        await localVideoPub.disable();
+                        localMuteButton.textContent = '映像・音声 ON';
+                    }
+                    isMuted = !isMuted;
+                };
+
+                // 退室ボタン
+                leaveButton.onclick = async () => {
+                    await me.leave();
+                    await room.close();
+                    location.reload();
+                };
+
+                room.onMemberLeft.add(() => {
+                    buttonArea.innerHTML = '';
+                    remoteId.textContent = '退出しました';
+                });
+
+            } catch (error) {
+                console.error(error);
+                alert('エラーが発生しました。コンソールを確認してください。');
+                joinButton.disabled = false;
+                joinButton.innerText = 'Room作成 / 参加';
+            }
         };
-      };
-
-      room.publications.forEach(subscribeAndAttach);
-      room.onStreamPublished.add((e) => subscribeAndAttach(e.publication));
-
-      // ミュートボタン
-      localMuteButton.onclick = async () => {
-        if (isMuted) {
-          await localAudioPub.enable();
-          await localVideoPub.enable();
-          localMuteButton.textContent = '映像・音声OFF';
-        } else {
-          await localAudioPub.disable();
-          await localVideoPub.disable();
-          localMuteButton.textContent = '映像・音声 ON';
-        }
-        isMuted = !isMuted;
-      };
-
-      // 終了ボタン
-      leaveButton.onclick = async () => {
-        await me.leave();
-        await room.close();
-        location.reload(); 
-      };
-
-      room.onMemberLeft.add(() => {
-        buttonArea.innerHTML = '';
-        remoteId.textContent = '相手が退出しました';
-      });
-    };
-  })();
+    })();
 </script>
 </body>
 </html>
-
