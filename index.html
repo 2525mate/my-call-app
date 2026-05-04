@@ -121,5 +121,46 @@
         }
     });
 </script>
+    window.addEventListener('load', async () => {
+        const statusText = document.getElementById('status-text');
+        
+        // 1. まずライブラリがあるかチェック
+        if (typeof skyway_room === 'undefined') {
+            statusText.innerText = "エラー: ライブラリが届いていません";
+            return;
+        }
+
+        const { nowInSec, SkyWayAuthToken, SkyWayContext, SkyWayRoom, SkyWayStreamFactory, uuidV4 } = skyway_room;
+
+        // --- ★ 設定 ---
+        const appId = 'あなたのアプリケーションID';
+        const secretKey = 'あなたのシークレットキー';
+
+        const joinButton = document.getElementById('join-button');
+        const roomNameInput = document.getElementById('room-name');
+
+        statusText.innerText = "カメラを起動中...";
+
+        try {
+            // 2. カメラとマイクの取得を試みる
+            const { audio, video } = await SkyWayStreamFactory.createMicrophoneAudioAndCameraStream();
+            video.attach(document.getElementById('local-video'));
+            statusText.innerText = "カメラOK！準備完了";
+            joinButton.disabled = false; // ここで初めてボタンを押せるようにする
+        } catch (e) {
+            console.error(e);
+            statusText.innerText = "カメラエラー: 許可されていないか、HTTPSではありません。";
+            // エラーでも無理やりボタンを押せるようにして、接続テストだけできるようにする
+            joinButton.disabled = false; 
+        }
+
+        joinButton.onclick = async () => {
+            statusText.innerText = "Room作成を試みています...";
+            // ... (以下、Room参加の処理)
+        };
+    });
+</script>
 </body>
 </html>
+
+
