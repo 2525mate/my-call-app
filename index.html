@@ -2,165 +2,131 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>SkyWay Handson Final</title>
-    <!-- 1. まずは道具箱を読み込む。ここが読み終わるまで次へ行かないように設定 -->
+    <title>SkyWay Final Check</title>
     <script src="https://cdn.jsdelivr.net/npm/@skyway-sdk/room/dist/skyway_room.js" defer></script>
-    
     <style>
-        body { font-family: sans-serif; margin: 20px; background: #f4f7f6; }
+        body { font-family: sans-serif; margin: 20px; background: #f4f7f6; text-align: center; }
         .container { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); max-width: 450px; margin: auto; }
-        video { width: 100%; background: #222; border-radius: 8px; margin-bottom: 10px; }
+        video { width: 100%; background: #222; border-radius: 8px; margin-bottom: 10px; min-height: 200px; }
         input, button { width: 100%; padding: 12px; margin: 6px 0; border-radius: 6px; border: 1px solid #ddd; box-sizing: border-box; }
         button { background: #007bff; color: white; border: none; font-weight: bold; cursor: pointer; }
-        button:hover { background: #0056b3; }
-        .status { font-size: 12px; color: #666; text-align: center; }
+        button:disabled { background: #ccc; cursor: not-allowed; }
+        .status { font-size: 13px; color: #d9534f; font-weight: bold; margin-top: 10px; }
     </style>
 </head>
 <body>
 
     <div class="container">
         <h2>SkyWay 通話アプリ</h2>
-        <video id="local-video" autoplay playsinline></video>
+        <video id="local-video" autoplay playsinline muted></video>
         <input id="room-name" placeholder="ルーム名を入力（例: niko10）">
+        
+        <!-- 最初は無効化、準備ができたら有効化 -->
         <button id="join-button">Room作成 / 参加</button>
+        
+        <p class="status" id="status-text">システム起動中...</p>
         <div id="button-area"></div>
         <video id="remote-video" autoplay playsinline></video>
-        <p class="status" id="status-text">準備中...</p>
     </div>
 
 <script>
-    // ブラウザが完全に準備できるまで待機
-    window.addEventListener('DOMContentLoaded', () => {
-        
-        const checkSDK = setInterval(() => {
-            // skyway_room が見つかるまで 0.5秒おきにチェック
-            if (typeof skyway_room !== 'undefined') {
-                clearInterval(checkSDK);
-                document.getElementById('status-text').innerText = "準備完了！";
-                initApp(); // アプリ起動
-            } else {
-                document.getElementById('status-text').innerText = "ライブラリ読み込み中...";
-            }
-        }, 500);
-
-        async function initApp() {
-            const { nowInSec, SkyWayAuthToken, SkyWayContext, SkyWayRoom, SkyWayStreamFactory, uuidV4 } = skyway_room;
-
-            // --- ★ 設定（書き換えてください） ---
-            const appId = '5fd4c76a-45ec-4ae8-8e88-988824d5b777';
-            const secretKey = 'Ae+MQqwkEBvUVhLU+ecdljnIY1DMEXwZeaoFEMevl70=';
-
-            const localVideo = document.getElementById('local-video');
-            const roomNameInput = document.getElementById('room-name');
-            const joinButton = document.getElementById('join-button');
-            const remoteVideo = document.getElementById('remote-video');
-            const buttonArea = document.getElementById('button-area');
-
-            // カメラの準備
-            const { audio, video } = await SkyWayStreamFactory.createMicrophoneAudioAndCameraStream();
-            video.attach(localVideo);
-
-            joinButton.onclick = async () => {
-                if (!roomNameInput.value) return;
-                joinButton.disabled = true;
-                joinButton.innerText = "接続中...";
-
-                // トークン生成（絶対必要な箇所）
-                const token = new SkyWayAuthToken({
-                    jti: uuidV4(), iat: nowInSec(), exp: nowInSec() + 3600 * 24,
-                    scope: {
-                        app: {
-                            id: appId, turn: true, actions: ['read'],
-                            channels: [{
-                                id: '*', name: '*', actions: ['write'],
-                                members: [{
-                                    id: '*', name: '*', actions: ['write'],
-                                    publication: { actions: ['write'] },
-                                    subscription: { actions: ['write'] },
-                                }],
-                                sfuBots: [{ actions: ['write'], forwardings: [{ actions: ['write'] }] }],
-                            }],
-                        },
-                    },
-                }).encode(secretKey);
-
-                try {
-                    // ContextとRoomの作成（絶対必要な箇所）
-                    const context = await SkyWayContext.Create(token);
-                    const room = await SkyWayRoom.FindOrCreate(context, {
-                        type: 'sfu',
-                        name: roomNameInput.value,
-                    });
-
-                    const me = await room.join();
-                    document.getElementById('status-text').innerText = "入室しました";
-
-                    await me.publish(audio);
-                    await me.publish(video);
-
-                    const subscribe = async (publication) => {
-                        if (publication.publisher.id === me.id) return;
-                        const btn = document.createElement('button');
-                        btn.textContent = "相手の映像を受信";
-                        buttonArea.appendChild(btn);
-                        btn.onclick = async () => {
-                            const { stream } = await me.subscribe(publication.id);
-                            stream.attach(remoteVideo);
-                            btn.remove();
-                        };
-                    };
-
-                    room.publications.forEach(subscribe);
-                    room.onStreamPublished.add((e) => subscribe(e.publication));
-
-                } catch (e) {
-                    console.error(e);
-                    alert("接続エラー。コンソールを確認してください。");
-                }
-            };
-        }
-    });
-</script>
     window.addEventListener('load', async () => {
         const statusText = document.getElementById('status-text');
-        
-        // 1. まずライブラリがあるかチェック
+        const joinButton = document.getElementById('join-button');
+        const roomNameInput = document.getElementById('room-name');
+        const localVideo = document.getElementById('local-video');
+
+        // SDK読み込みチェック
         if (typeof skyway_room === 'undefined') {
-            statusText.innerText = "エラー: ライブラリが届いていません";
+            statusText.innerText = "エラー: SkyWayライブラリが読み込めません";
             return;
         }
 
         const { nowInSec, SkyWayAuthToken, SkyWayContext, SkyWayRoom, SkyWayStreamFactory, uuidV4 } = skyway_room;
 
-        // --- ★ 設定 ---
-        const appId = 'あなたのアプリケーションID';
-        const secretKey = 'あなたのシークレットキー';
+        // --- ★ 設定（あなたのキーに書き換えてください） ---
+        const appId = '5fd4c76a-45ec-4ae8-8e88-988824d5b777';
+        const secretKey = 'Ae+MQqwkEBvUVhLU+ecdljnIY1DMEXwZeaoFEMevl70=';
 
-        const joinButton = document.getElementById('join-button');
-        const roomNameInput = document.getElementById('room-name');
+        let localAudio, localVideoTrack;
 
-        statusText.innerText = "カメラを起動中...";
-
+        // カメラとマイクの起動を試みる
         try {
-            // 2. カメラとマイクの取得を試みる
+            statusText.style.color = "#666";
+            statusText.innerText = "カメラを起動しています...";
+            
             const { audio, video } = await SkyWayStreamFactory.createMicrophoneAudioAndCameraStream();
-            video.attach(document.getElementById('local-video'));
-            statusText.innerText = "カメラOK！準備完了";
-            joinButton.disabled = false; // ここで初めてボタンを押せるようにする
+            localAudio = audio;
+            localVideoTrack = video;
+            video.attach(localVideo);
+            
+            statusText.innerText = "カメラ準備完了！";
+            statusText.style.color = "#5cb85c";
         } catch (e) {
             console.error(e);
-            statusText.innerText = "カメラエラー: 許可されていないか、HTTPSではありません。";
-            // エラーでも無理やりボタンを押せるようにして、接続テストだけできるようにする
-            joinButton.disabled = false; 
+            statusText.innerText = "カメラを起動できませんでした。そのまま続行します。";
         }
 
+        // カメラがダメでも、ボタンは押せるようにする
+        joinButton.disabled = false;
+
         joinButton.onclick = async () => {
+            if (!roomNameInput.value) {
+                alert("ルーム名を入れてください");
+                return;
+            }
+            joinButton.disabled = true;
             statusText.innerText = "Room作成を試みています...";
-            // ... (以下、Room参加の処理)
+
+            const token = new SkyWayAuthToken({
+                jti: uuidV4(), iat: nowInSec(), exp: nowInSec() + 3600 * 24,
+                scope: {
+                    app: {
+                        id: appId, turn: true, actions: ['read'],
+                        channels: [{
+                            id: '*', name: '*', actions: ['write'],
+                            members: [{
+                                id: '*', name: '*', actions: ['write'],
+                                publication: { actions: ['write'] },
+                                subscription: { actions: ['write'] },
+                            }],
+                            sfuBots: [{ actions: ['write'], forwardings: [{ actions: ['write'] }] }],
+                        }],
+                    },
+                },
+            }).encode(secretKey);
+
+            try {
+                const context = await SkyWayContext.Create(token);
+                const room = await SkyWayRoom.FindOrCreate(context, {
+                    type: 'sfu',
+                    name: roomNameInput.value,
+                });
+
+                const me = await room.join();
+                statusText.innerText = "入室成功！他の人を待ちましょう";
+
+                if (localAudio) await me.publish(localAudio);
+                if (localVideoTrack) await me.publish(localVideoTrack);
+
+                room.onStreamPublished.add(async (e) => {
+                    if (e.publication.publisher.id === me.id) return;
+                    const btn = document.createElement('button');
+                    btn.textContent = "相手の映像を受信";
+                    document.getElementById('button-area').appendChild(btn);
+                    btn.onclick = async () => {
+                        const { stream } = await me.subscribe(e.publication.id);
+                        stream.attach(document.getElementById('remote-video'));
+                        btn.remove();
+                    };
+                });
+            } catch (err) {
+                console.error(err);
+                statusText.innerText = "接続エラー！キーやドメイン設定を確認してください";
+                joinButton.disabled = false;
+            }
         };
     });
 </script>
 </body>
 </html>
-
-
