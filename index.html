@@ -2,93 +2,54 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SkyWay SFU Room</title>
-    <!-- 1. 道具箱（ライブラリ）を読み込む -->
+    <title>SkyWay Handson</title>
     <script src="https://cdn.jsdelivr.net/npm/@skyway-sdk/room/dist/skyway_room.js"></script>
     <style>
-        body { margin: 20px; font-family: sans-serif; background: #f8f9fa; }
-        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)); gap: 20px; }
-        .card { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
-        video { width: 100%; background: #000; border-radius: 5px; height: 240px; }
-        input, button { width: 100%; padding: 12px; margin: 8px 0; box-sizing: border-box; border-radius: 6px; }
-        button { background: #007bff; color: white; border: none; font-weight: bold; cursor: pointer; }
-        button:disabled { background: #ccc; }
-        .id-text { font-size: 11px; color: #888; }
+        body { font-family: sans-serif; margin: 20px; }
+        video { width: 300px; background: #000; }
+        .card { border: 1px solid #ccc; padding: 10px; margin-bottom: 10px; }
     </style>
 </head>
 <body>
-
-<div class="grid">
+    <h1>SkyWay 接続テスト</h1>
     <div class="card">
-        <h2>Local (自分)</h2>
         <video id="local-video" autoplay playsinline></video>
-        <audio id="local-audio" autoplay muted controls></audio>
-        <p class="id-text">My ID: <span id="my-id">---</span></p>
-        <input id="room-name" placeholder="Room名（例: niko123）">
-        <button id="join-button">Room作成 / 参加</button>
-        <button id="local-mute-buton" disabled>映像・音声 OFF</button>
-        <button id="leave-button" disabled>終了</button>
+        <input id="room-name" placeholder="ルーム名">
+        <button id="join-button">Room作成/参加</button>
     </div>
-
-    <div class="card">
-        <h2>Remote (相手)</h2>
+    <div id="remote-area" class="card">
         <video id="remote-video" autoplay playsinline></video>
-        <audio id="remote-audio" autoplay controls></audio>
-        <p class="id-text">Remote ID: <span id="remote-id">---</span></p>
         <div id="button-area"></div>
     </div>
-</div>
 
 <script>
-    // 2. ライブラリの読み込みが完了してから動くように設定
-    window.onload = async () => {
-        
-        // ライブラリが正しく読み込まれているかチェック
-        if (typeof skyway_room === 'undefined') {
-            alert("SkyWayの読み込みに失敗しました。ネット接続を確認してください。");
-            return;
-        }
-
+    // ブラウザがSDKを認識するまで待つための処理
+    const startApp = async () => {
         const { nowInSec, SkyWayAuthToken, SkyWayContext, SkyWayRoom, SkyWayStreamFactory, uuidV4 } = skyway_room;
 
-        // --- ★ここにあなたのキーを貼り付けてください ---
-        const appId = 'アプリケーションIDをここに貼り付け';
-        const secretKey = 'シークレットキーをここに貼り付け';
+        // --- 設定 ---
+        const appId = 'あなたのアプリケーションID';
+        const secretKey = 'あなたのシークレットキー';
 
-        const localAudio = document.getElementById('local-audio');
         const localVideo = document.getElementById('local-video');
         const roomNameInput = document.getElementById('room-name');
         const joinButton = document.getElementById('join-button');
-        const localMuteButton = document.getElementById('local-mute-buton');
-        const leaveButton = document.getElementById('leave-button');
-        const myId = document.getElementById('my-id');
-        const remoteId = document.getElementById('remote-id');
         const remoteVideo = document.getElementById('remote-video');
-        const remoteAudio = document.getElementById('remote-audio');
-        const buttonArea = document.querySelector('#button-area');
+        const buttonArea = document.getElementById('button-area');
 
-        let isMuted = false;
-
-        // カメラとマイクを準備
+        // カメラ取得
         const { audio, video } = await SkyWayStreamFactory.createMicrophoneAudioAndCameraStream();
-        audio.attach(localAudio);
         video.attach(localVideo);
 
         joinButton.onclick = async () => {
-            if (!roomNameInput.value) return;
-            joinButton.disabled = true;
+            console.log("ボタンが押されました"); // 確認用
 
-            // 3. 通行証（トークン）を作成
+            // トークン生成（ご指定のロジック）
             const token = new SkyWayAuthToken({
-                jti: uuidV4(),
-                iat: nowInSec(),
-                exp: nowInSec() + 60 * 60 * 24,
+                jti: uuidV4(), iat: nowInSec(), exp: nowInSec() + 3600,
                 scope: {
                     app: {
-                        id: appId,
-                        turn: true,
-                        actions: ['read'],
+                        id: appId, turn: true, actions: ['read'],
                         channels: [{
                             id: '*', name: '*', actions: ['write'],
                             members: [{
@@ -102,53 +63,38 @@
                 },
             }).encode(secretKey);
 
-            // 4. 指定された通り、一字一句変えずに組み込み
+            // ContextとRoomの作成
             const context = await SkyWayContext.Create(token);
             const room = await SkyWayRoom.FindOrCreate(context, {
                 type: 'sfu',
                 name: roomNameInput.value,
             });
 
-            // 5. 部屋に参加
             const me = await room.join();
-            myId.textContent = me.id;
-            localMuteButton.disabled = false;
-            leaveButton.disabled = false;
+            console.log("入室成功:", me.id);
 
-            const localAudioPub = await me.publish(audio);
-            const localVideoPub = await me.publish(video);
+            await me.publish(audio);
+            await me.publish(video);
 
-            const subscribeAndAttach = (publication) => {
-                if (publication.publisher.id === me.id) return;
-                remoteId.textContent = publication.publisher.id;
-
+            room.onStreamPublished.add(async (e) => {
+                if (e.publication.publisher.id === me.id) return;
                 const btn = document.createElement('button');
-                btn.textContent = `${publication.contentType}を受信`;
+                btn.textContent = "受信開始";
                 buttonArea.appendChild(btn);
-
                 btn.onclick = async () => {
-                    const { stream } = await me.subscribe(publication.id);
-                    if (stream.track.kind === 'video') {
-                        stream.attach(remoteVideo);
-                    } else {
-                        stream.attach(remoteAudio);
-                    }
-                    btn.disabled = true;
+                    const { stream } = await me.subscribe(e.publication.id);
+                    stream.attach(remoteVideo);
                 };
-            };
-
-            room.publications.forEach(subscribeAndAttach);
-            room.onStreamPublished.add((e) => subscribeAndAttach(e.publication));
-
-            localMuteButton.onclick = async () => {
-                isMuted ? (await localAudioPub.enable(), await localVideoPub.enable()) : (await localAudioPub.disable(), await localVideoPub.disable());
-                isMuted = !isMuted;
-                localMuteButton.textContent = isMuted ? '映像・音声 ON' : '映像・音声 OFF';
-            };
-
-            leaveButton.onclick = () => location.reload();
+            });
         };
     };
+
+    // SDKが読み込まれたら開始
+    if (window.skyway_room) {
+        startApp();
+    } else {
+        window.addEventListener('load', startApp);
+    }
 </script>
 </body>
 </html>
