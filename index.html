@@ -31,8 +31,10 @@
     <video id="my-video" muted playsinline autoplay></video>
   </div>
 
-  <script>
-    const { SkyWayContext, SkyWayRoom, SkyWayStreamFactory } = SkyWayRoom;
+<script>
+    // ページが全部読み込まれてから開始するように変更
+    window.onload = async () => {
+        const { SkyWayContext, SkyWayRoom, SkyWayStreamFactory } = SkyWayRoom;
 
     // --- 【設定】ここを必ず書き換えてください ---
     const appId = 'b0dc9644-63d5-47ea-9739-249a5b37166c';
